@@ -202,6 +202,67 @@ class CrontabSchedule(models.Model):
             cls.objects.filter(**spec).delete()
             return cls(**spec)
 
+@python_2_unicode_compatible
+class CrontabExtSchedule(models.Model):
+    """Crontab-like schedule."""
+
+    second = models.CharField(_('second'), max_length=60 * 4, default='*')
+    minute = models.CharField(_('minute'), max_length=60 * 4, default='*')
+    hour = models.CharField(_('hour'), max_length=24 * 4, default='*')
+    day_of_week = models.CharField(
+        _('day of week'), max_length=64, default='*',
+    )
+    day_of_month = models.CharField(
+        _('day of month'), max_length=31 * 4, default='*',
+    )
+    month_of_year = models.CharField(
+        _('month of year'), max_length=64, default='*',
+    )
+
+    class Meta:
+        """Table information."""
+
+        verbose_name = _('crontabext')
+        verbose_name_plural = _('crontabexts')
+        ordering = ['month_of_year', 'day_of_month',
+                    'day_of_week', 'hour', 'minute', 'second']
+
+    def __str__(self):
+        return '{0} {1} {2} {3} {4} {5} (s/m/h/d/dM/MY)'.format(
+            cronexp(self.second),
+            cronexp(self.minute),
+            cronexp(self.hour),
+            cronexp(self.day_of_week),
+            cronexp(self.day_of_month),
+            cronexp(self.month_of_year),
+        )
+
+    @property
+    def schedule(self):
+        return schedules.crontabext(second=self.second,
+                                    minute=self.minute,
+                                    hour=self.hour,
+                                    day_of_week=self.day_of_week,
+                                    day_of_month=self.day_of_month,
+                                    month_of_year=self.month_of_year,
+                                    nowfun=lambda: make_aware(now()))
+
+    @classmethod
+    def from_schedule(cls, schedule):
+        spec = {'second': schedule._orig_second,
+                'minute': schedule._orig_minute,
+                'hour': schedule._orig_hour,
+                'day_of_week': schedule._orig_day_of_week,
+                'day_of_month': schedule._orig_day_of_month,
+                'month_of_year': schedule._orig_month_of_year}
+        try:
+            return cls.objects.get(**spec)
+        except cls.DoesNotExist:
+            return cls(**spec)
+        except MultipleObjectsReturned:
+            cls.objects.filter(**spec).delete()
+            return cls(**spec)
+
 
 class PeriodicTasks(models.Model):
     """Helper table for tracking updates to periodic tasks."""
@@ -244,6 +305,10 @@ class PeriodicTask(models.Model):
     crontab = models.ForeignKey(
         CrontabSchedule, on_delete=models.CASCADE, null=True, blank=True,
         verbose_name=_('crontab'), help_text=_('Use one of interval/crontab'),
+    )
+    crontabext = models.ForeignKey(
+        CrontabExtSchedule, on_delete=models.CASCADE, null=True, blank=True,
+        verbose_name=_('crontabext'), help_text=_('Use one of interval/crontabext'),
     )
     solar = models.ForeignKey(
         SolarSchedule, on_delete=models.CASCADE, null=True, blank=True,
@@ -294,16 +359,16 @@ class PeriodicTask(models.Model):
 
     def validate_unique(self, *args, **kwargs):
         super(PeriodicTask, self).validate_unique(*args, **kwargs)
-        if not self.interval and not self.crontab and not self.solar:
+        if not self.interval and not self.crontab and not self.crontabext and not self.solar:
             raise ValidationError({
                 'interval': [
-                    'One of interval, crontab, or solar must be set.'
+                    'One of interval, crontab/crontabext, or solar must be set.'
                 ]
             })
-        if self.interval and self.crontab and self.solar:
+        if self.interval and self.crontab and self.crontabext and self.solar:
             raise ValidationError({
-                'crontab': [
-                    'Only one of interval, crontab, or solar must be set'
+                'crontab/crontabext': [
+                    'Only one of interval, crontab/crontabext, or solar must be set'
                 ]
             })
 
@@ -321,6 +386,8 @@ class PeriodicTask(models.Model):
             fmt = '{0.name}: {0.interval}'
         if self.crontab:
             fmt = '{0.name}: {0.crontab}'
+        if self.crontabext:
+            fmt = '{0.name}: {0.crontabext}'
         if self.solar:
             fmt = '{0.name}: {0.solar}'
         return fmt.format(self)
@@ -331,6 +398,8 @@ class PeriodicTask(models.Model):
             return self.interval.schedule
         if self.crontab:
             return self.crontab.schedule
+        if self.crontabext:
+            return self.crontabext.schedule
         if self.solar:
             return self.solar.schedule
 
@@ -345,6 +414,10 @@ signals.post_delete.connect(
     PeriodicTasks.update_changed, sender=CrontabSchedule)
 signals.post_save.connect(
     PeriodicTasks.update_changed, sender=CrontabSchedule)
+signals.post_delete.connect(
+    PeriodicTasks.update_changed, sender=CrontabExtSchedule)
+signals.post_save.connect(
+    PeriodicTasks.update_changed, sender=CrontabExtSchedule)
 signals.post_delete.connect(
     PeriodicTasks.update_changed, sender=SolarSchedule)
 signals.post_save.connect(

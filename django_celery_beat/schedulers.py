@@ -19,7 +19,7 @@ from django.core.exceptions import ObjectDoesNotExist
 
 from .models import (
     PeriodicTask, PeriodicTasks,
-    CrontabSchedule, IntervalSchedule,
+    CrontabSchedule, CrontabExtSchedule, IntervalSchedule,
     SolarSchedule,
 )
 from .utils import make_aware
@@ -30,9 +30,11 @@ except ImportError:  # pragma: no cover
     from celery.utils.timeutils import is_naive  # noqa
 
 # This scheduler must wake up more frequently than the
-# regular of 5 minutes because it needs to take external
+# regular of 1 second because it needs to take external
 # changes to the schedule into account.
-DEFAULT_MAX_INTERVAL = 5  # seconds
+# This was 5, but it needs 1 because of taking care of
+# crontabext's seconds field.
+DEFAULT_MAX_INTERVAL = 1  # seconds
 
 ADD_ENTRY_ERROR = """\
 Cannot add entry %r to database schedule: %r. Contents: %r
@@ -47,6 +49,7 @@ class ModelEntry(ScheduleEntry):
 
     model_schedules = (
         (schedules.crontab, CrontabSchedule, 'crontab'),
+        (schedules.crontabext, CrontabExtSchedule, 'crontabext'),
         (schedules.schedule, IntervalSchedule, 'interval'),
         (schedules.solar, SolarSchedule, 'solar'),
     )

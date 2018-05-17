@@ -1,1 +1,1 @@
-celery>=4.0,<5.0
+-e git+https://github.com/potch8228/celery.git@v4.1-custom-crontabext#egg=celery

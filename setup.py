@@ -146,7 +146,10 @@ setuptools.setup(
     url=meta['homepage'],
     platforms=['any'],
     license='BSD',
-    install_requires=reqs('default.txt'),
+    # install_requires=reqs('default.txt'),
+    dependency_links=[
+        'git+https://bitbucket.org/potch8228/celery.git@v4.1-custom-crontabext#egg=celery'
+    ],
     tests_require=reqs('test.txt') + reqs('test-django.txt'),
     cmdclass={'test': pytest},
     classifiers=classifiers,
